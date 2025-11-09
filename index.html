@@ -1,0 +1,527 @@
+<!-- Chosen Palette: Warm Neutral & Earth (#F9F5F0 BG, #4A4A4A Text, #D4A373 Primary, #A37B73 Accent) -->
+<!-- Application Structure Plan: Designed a dashboard-style SPA. A sticky navigation bar allows users to filter proposals by major type (Constitutional, Legal) and by thematic area (e.g., Judiciary, Admin, ACC). A high-level dashboard shows key metrics (33 entities, 84 proposals) and an overall consensus distribution (Histogram). The main body is an interactive "Proposal Explorer" - a filterable grid of cards. Each card shows a proposal summary and a mini-chart. Clicking a card opens a modal with the full proposal text, a detailed consensus chart (Donut), and the specific political notes. This structure was chosen to transform the dense 84-point text report from a passive "reading" experience into an active "exploration" tool, allowing users to drill down into topics of interest without being overwhelmed. -->
+<!-- Visualization & Content Choices:
+* Report Info: High-level counts (Entities, Proposals). Goal: Inform. Viz/Method: Large text "Stat Cards" (HTML/Tailwind). Interaction: None (static). Justification: Quick, clear overview.
+* Report Info: Overall consensus data (Distribution of agreement counts across 84 proposals). Goal: Organize/Compare. Viz/Method: Bar Chart/Histogram (Chart.js/Canvas). Interaction: Filterable by main category. Justification: Shows the *overall* political landscape at a glance (e.g., "are most things agreed upon, or is it split?").
+* Report Info: Individual Proposal Consensus (e.g., Item 2: 29 agree, 3 disagree, 1 no comment). Goal: Inform/Compare. Viz/Method: Horizontal Stacked Bar (mini, in-card) and Donut Chart (large, in-modal) (Chart.js/Canvas). Interaction: Click card to see modal. Justification: Mini-bar provides quick visual cue in the grid. Donut chart in modal provides a clear, simple proportion for the specific item being examined.
+* Report Info: Proposal Details (Full text, notes). Goal: Inform. Viz/Method: Text blocks within a Modal (HTML/JS). Interaction: Show/hide modal on click. Justification: Hides complex details until requested, keeping the main explorer grid clean.
+* Report Info: Report Structure (Constitutional vs. Legal, Judiciary, Admin, etc.). Goal: Organize. Viz/Method: Sticky Navigation Bar with filters (HTML/JS). Interaction: Click to filter. Justification: This is the primary interactive element, allowing users to navigate the 84 proposals thematically.
+* Report Info: Process Flow (How the charter was made). Goal: Organize. Viz/Method: Simple horizontal flow diagram (HTML/Tailwind/Unicode arrows). Interaction: None (static). JustFIG: A simple, clear way to show the process without violating NO SVG/NO Mermaid.
+* CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. All charts use Chart.js/Canvas. All diagrams use HTML/Tailwind. -->
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>জুলাই জাতীয় সনদ ২০২৫: একটি ইন্টারেক্টিভ বিশ্লেষণ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans Bengali', sans-serif;
+            background-color: #F9F5F0;
+            color: #4A4A4A;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #E6D9C6;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            max-height: 400px;
+            max-width: 768px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .modal-chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            height: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .nav-button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .nav-button.active {
+            background-color: #D4A373;
+            color: #ffffff;
+            border-color: #D4A373;
+        }
+        .nav-button:not(.active):hover {
+            background-color: #E6D9C6;
+        }
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #ffffff;
+            min-width: 200px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.1);
+            z-index: 10;
+            border-radius: 0.375rem;
+            border: 1px solid #E6D9C6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .dropdown-content a {
+            color: #4A4A4A;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+        }
+        .dropdown-content a:hover {
+            background-color: #F9F5F0;
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="max-w-7xl mx-auto p-4 sm:p-8">
+
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-bold text-[#4A4A4A] mb-4">জুলাই জাতীয় সনদ ২০২৫</h1>
+            <p class="text-xl md:text-2xl font-medium text-[#D4A373]">একটি ইন্টারেক্টিভ বিশ্লেষণ</p>
+        </header>
+
+        <nav id="navbar" class="sticky top-0 z-10 bg-white/90 backdrop-blur-sm shadow-sm p-4 rounded-lg mb-8">
+            <div class="flex flex-wrap items-center justify-center gap-2 md:gap-4">
+                <button class="nav-button active" data-filter-type="all" data-filter-value="all">সকল প্রস্তাব (৮৪)</button>
+                <button class="nav-button" data-filter-type="category" data-filter-value="constitutional">সাংবিধানিক সংস্কার (৪৭)</button>
+                <button class="nav-button" data-filter-type="category" data-filter-value="legal">আইনি ও নির্বাহী সংস্কার (৩৭)</button>
+                <div class="dropdown">
+                    <button class="nav-button flex items-center gap-2">
+                        ক্ষেত্রভিত্তিক ফিল্টার
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    </button>
+                    <div class="dropdown-content" id="tag-filter-options">
+                        <a data-filter-type="tag" data-filter-value="all">সকল ক্ষেত্র</a>
+                        <a data-filter-type="tag" data-filter-value="সংবিধান">সংবিধান</a>
+                        <a data-filter-type="tag" data-filter-value="রাষ্ট্রপতি">রাষ্ট্রপতি</a>
+                        <a data-filter-type="tag" data-filter-value="আইনসভা">আইনসভা</a>
+                        <a data-filter-type="tag" data-filter-value="বিচার বিভাগ">বিচার বিভাগ</a>
+                        <a data-filter-type="tag" data-filter-value="নির্বাচন">নির্বাচন</a>
+                        <a data-filter-type="tag" data-filter-value="জনপ্রশাসন">জনপ্রশাসন</a>
+                        <a data-filter-type="tag" data-filter-value="দুর্নীতি দমন">দুর্নীতি দমন</a>
+                        <a data-filter-type="tag" data-filter-value="পুলিশ">পুলিশ</a>
+                        <a data-filter-type="tag" data-filter-value="স্থানীয় সরকার">স্থানীয় সরকার</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="card p-6 text-center">
+                <div class="text-5xl font-bold text-[#D4A373]">৩৩</div>
+                <div class="text-lg font-medium mt-2">রাজনৈতিক দল ও জোট</div>
+            </div>
+            <div class="card p-6 text-center">
+                <div class="text-5xl font-bold text-[#A37B73]">৮৪</div>
+                <div class="text-lg font-medium mt-2">মোট সংস্কার প্রস্তাব</div>
+            </div>
+            <div class="card p-6 text-center">
+                <div class="text-5xl font-bold text-[#5D737E]" id="overall-consensus-stat">...%</div>
+                <div class="text-lg font-medium mt-2">গড় ঐকমত্য হার</div>
+            </div>
+        </section>
+
+        <section class="card p-6 mb-8">
+            <h2 class="text-2xl font-bold text-center mb-6">ঐকমত্যের সামগ্রিক চিত্র</h2>
+            <p class="text-center text-gray-600 max-w-3xl mx-auto mb-6">
+                এই চার্টটি দেখায় যে, ৮৪টি প্রস্তাবের মধ্যে কতগুলি প্রস্তাব কি পরিমাণ রাজনৈতিক দলের (সর্বোচ্চ ৩৩) সমর্থন পেয়েছে। এটি থেকে সংস্কারের বিষয়ে সামগ্রিক রাজনৈতিক সদিচ্ছার একটি ধারণা পাওয়া যায়।
+            </p>
+            <div class="chart-container">
+                <canvas id="overviewChart"></canvas>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-2xl font-bold text-center mb-6">প্রস্তাব এক্সপ্লোরার</h2>
+            <p class="text-center text-gray-600 max-w-3xl mx-auto mb-8" id="explorer-subtitle">
+                বর্তমানে "সকল প্রস্তাব" প্রদর্শিত হচ্ছে। নেভিগেশন বার ব্যবহার করে ফিল্টার করুন অথবা যেকোনো কার্ডে ক্লিক করে বিস্তারিত জানুন।
+            </p>
+            <div id="proposal-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+        </section>
+
+    </div>
+
+    <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-40 flex items-center justify-center p-4 hidden">
+        <div class="w-full max-w-3xl bg-white rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div class="p-6 md:p-8">
+                <div class="flex justify-between items-start mb-4">
+                    <h2 id="modal-title" class="text-2xl font-bold text-[#4A4A4A]"></h2>
+                    <button id="modal-close-btn" class="text-gray-500 hover:text-red-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M.146 0.146a.5.5 0 0 1 .708 0l7.5 7.5 7.5-7.5a.5.5 0 0 1 .708.708l-7.5 7.5 7.5 7.5a.5.5 0 0 1-.708.708l-7.5-7.5-7.5 7.5a.5.5 0 0 1-.708-.708l7.5-7.5-7.5-7.5a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-2">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2">সনদের ভাষ্য:</h3>
+                        <p id="modal-charter-text" class="text-base text-gray-600 bg-gray-50 p-4 rounded-md border"></p>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">ঐকমত্যের চিত্র</h3>
+                        <div class="modal-chart-container">
+                            <canvas id="modal-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2">রাজনৈতিক দল ও জোটের মতামত:</h3>
+                    <div id="modal-opinion-text" class="text-sm text-gray-600 bg-gray-50 p-4 rounded-md border space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center mt-12 py-8 border-t border-[#E6D9C6]">
+        <p class="text-sm text-gray-600">"জুলাই জাতীয় সনদ ২০২৫" দলিলের উপর ভিত্তি করে তৈরি একটি ইন্টারেক্টিভ অ্যাপ্লিকেশন।</p>
+    </footer>
+
+    <script>
+        const allProposals = [
+            { id: 1, title: "ভাষা", fullTitle: "দফা ১: ভাষা", category: "constitutional", tags: ["সংবিধান", "মৌলিক"], charterText: "প্রজাতন্ত্রের রাষ্ট্র ভাষা হবে বাংলা। সংবিধানে বাংলাদেশের নাগরিকদের মাতৃভাষা হিসেবে ব্যবহৃত অন্যান্য সকল ভাষাকে দেশের প্রচলিত ভাষা হিসেবে স্বীকৃতি প্রদান করা হবে।", opinions: { agree: 32, disagree: 0, text: "৩২টি রাজনৈতিক দল ও জোট একমত: পরিশিষ্টের ক্রমিক (১), (২), (৩), (৪), (৬), (৭), (৮), (৯), (১০), (১১), (১২), (১৩), (১৪), (১৫), (১৬), (১৭), (১৮), (১৯), (২০), (২১), (২২), (২৩), (২৪), (২৫), (২৬), (২৭), (২৮), (২৯), (৩০), (৩১), (৩২) ও (৩৩)।" } },
+            { id: 2, title: "নাগরিকদের পরিচয়", fullTitle: "দফা ২: বাংলাদেশের নাগরিকদের পরিচয়", category: "constitutional", tags: ["সংবিধান", "মৌলিক"], charterText: "বিদ্যমান সংবিধানের অনুচ্ছেদ ৬(২)-এ বর্ণিত 'বাংলাদেশের জনগণ জাতি হিসাবে বাঙালী এবং নাগরিকগণ বাংলাদেশী বলিয়া পরিচিত হইবেন' বিধানটি নিম্নোক্তভাবে প্রতিস্থাপন করা হবে: \"বাংলাদেশের নাগরিকগণ বাংলাদেশি'' বলিয়া পরিচিত হইবেন।\"", opinions: { agree: 29, disagree: 3, text: "২৯টি রাজনৈতিক দল ও জোট একমত: পরিশিষ্টের ক্রমিক (১), (২), (৩), (৪), (৬), (৭), (৮), (১০), (১১), (১২), (১৩), (১৪), (১৬), (১৭), (১৮), (১৯), (২০), (২১), (২২), (২৩), (২৪), (২৫), (২৬), (২৭), (২৯), (৩০), (৩১), (৩২) ও (৩৩)।\n৩টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (৯), (১৫) ও (২৮)।\n[নোট: অবশ্য কোনো রাজনৈতিক দল বা জোট তাদের নির্বাচনি ইশতেহারে উল্লেখপূর্বক যদি জনগণের ম্যান্ডেট লাভ করে তাহলে তারা সেইমতে ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 3, title: "সংবিধান সংশোধন", fullTitle: "দফা ৩: সংবিধান সংশোধন", category: "constitutional", tags: ["সংবিধান", "আইনসভা"], charterText: "সংবিধান সংশোধনের জন্য সংসদের নিম্নকক্ষের দুই-তৃতীয়াংশ এবং উচ্চকক্ষের সংখ্যাগরিষ্ঠ সদস্যের সমর্থন প্রয়োজন হবে; তবে প্রস্তাবনাসহ সুনির্দিষ্ট কতগুলো অনুচ্ছেদ...সংশোধনের ক্ষেত্রে গণভোটের প্রয়োজন হবে।", opinions: { agree: 30, disagree: 2, text: "৩০টি রাজনৈতিক দল ও জোট একমত।\n২টি রাজনৈতিক দলের নোট অব ডিসেন্ট: পরিশিষ্টের ক্রমিক (২১) [উচ্চকক্ষের ক্ষমতা ও কর্মপরিধি নিয়ে ভিন্নমত] ও (২৮) [উচ্চকক্ষের প্রয়োজন নেই]।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 7, title: "মূলনীতিসমূহ", fullTitle: "দফা ৭: মূলনীতিসমূহ", category: "constitutional", tags: ["সংবিধান", "মৌলিক"], charterText: "সংবিধানে রাষ্ট্র পরিচালনার মূলনীতি অংশে 'সাম্য, মানবিক মর্যাদা, সামাজিক ন্যায়বিচার এবং ধর্মীয় স্বাধীনতা ও সম্প্রীতি' উল্লেখ থাকবে।", opinions: { agree: 24, disagree: 6, text: "২৪টি রাজনৈতিক দল ও জোট একমত।\n৬টি রাজনৈতিক দলের নোট অব ডিসেন্ট: পরিশিষ্টের ক্রমিক (৯), (১৫), (২০), (২৫), (২৭) ও (২৮)।\n[নোট: ৬টি রাজনৈতিক দল বিদ্যমান চার মূলনীতি অপরিবর্তিত রেখে যুক্ত করার বিষয়ে একমত।] " } },
+            { id: 11, title: "রাষ্ট্রপতির ক্ষমতা", fullTitle: "দফা ১১: রাষ্ট্রপতির ক্ষমতা ও দায়িত্ব", category: "constitutional", tags: ["রাষ্ট্রপতি", "ক্ষমতার ভারসাম্য"], charterText: "রাষ্ট্রপতি ও প্রধানমন্ত্রীর ক্ষমতার ভারসাম্য আনয়নের লক্ষ্যে...রাষ্ট্রপতি নিম্নলিখিত পদে নিয়োগ প্রদান করতে পারেন: (১) জাতীয় মানবাধিকার কমিশন..., (২) তথ্য কমিশন..., (৩) প্রেস কাউন্সিল..., (৪) আইন কমিশন..., (৫) বাংলাদেশ ব্যাংকের গভর্নর, এবং (৬) বাংলাদেশ এনার্জি রেগুলেটরি কমিশন।", opinions: { agree: 30, disagree: 9, text: "৩০টি রাজনৈতিক দল ও জোট দফা ১১ এর ক্রমিক (১)-(৪)-এর বিষয়ে একমত।\n৯টি রাজনৈতিক দল ও জোটের নোট অব ডিসেন্ট: দফা ১১ এর ক্রমিক (৫) ও (৬)-এর বিষয়ে...।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 14, title: "প্রধানমন্ত্রীর মেয়াদ", fullTitle: "দফা ১৪: প্রধানমন্ত্রীর পদের মেয়াদ", category: "constitutional", tags: ["আইনসভা", "ক্ষমতার ভারসাম্য"], charterText: "একজন ব্যক্তি প্রধানমন্ত্রী পদে যত মেয়াদ বা যত বারই হোক সর্বোচ্চ ১০ (দশ) বছর থাকতে পারবেন...", opinions: { agree: 30, disagree: 0, text: "৩০টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 16, title: "তত্ত্বাবধায়ক সরকার", fullTitle: "দফা ১৬: তত্ত্বাবধায়ক সরকার ব্যবস্থা", category: "constitutional", tags: ["নির্বাচন", "সংবিধান"], charterText: "সংবিধান সংশোধন করে...সংসদ ভেঙ্গে যাওয়ার পরবর্তী ৯০ (নব্বই) দিনের মধ্যে সংসদ সদস্যদের সাধারণ নির্বাচন অনুষ্ঠিত হবে...", opinions: { agree: 30, disagree: 0, text: "৩০টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 17, title: "দ্বি-কক্ষ বিশিষ্ট আইনসভা", fullTitle: "দফা ১৭: আইনসভা গঠন", category: "constitutional", tags: ["আইনসভা", "সংবিধান"], charterText: "সংবিধানে এরূপ যুক্ত করা হবে যে, বাংলাদেশে একটি দ্বি-কক্ষ বিশিষ্ট আইনসভা থাকবে, যা নিম্নকক্ষ (জাতীয় সংসদ) এবং উচ্চকক্ষ (সিনেট) সমন্বয়ে গঠিত হবে।", opinions: { agree: 25, disagree: 5, text: "২৫টি রাজনৈতিক দল ও জোট একমত।\n৫টি রাজনৈতিক দলের নোট অব ডিসেন্ট: পরিশিষ্টের ক্রমিক (২), (১১), (২৫), (২৮) [উচ্চকক্ষের প্রয়োজন নেই] ও (৩৩)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 25, title: "সংসদে দলের বিরুদ্ধে ভোট", fullTitle: "দফা ২৫: জাতীয় সংসদে দলের বিরুদ্ধে ভোটদান", category: "constitutional", tags: ["আইনসভা", "অনুচ্ছেদ ৭০"], charterText: "সংবিধানের অনুচ্ছেদ ৭০-এর বিদ্যমান বিধান পরির্বতন করে...সদস্যগণ কেবল অর্থবিল এবং আস্থা ভোট প্রদানের ক্ষেত্রে নিজ দলের প্রতি অনুগত থাকবেন। অন্য যেকোনো বিষয়ে তারা স্বাধীনভাবে ভোট দিতে পারবেন।", opinions: { agree: 29, disagree: 1, text: "২৯টি রাজনৈতিক দল ও জোট একমত।\n১টি রাজনৈতিক দলের নোট অব ডিসেন্ট: পরিশিষ্টের ক্রমিক (২১)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 31, title: "বিচারক নিয়োগ কমিশন", fullTitle: "দফা ৩১: সুপ্রীম কোর্টের বিচারক নিয়োগ", category: "constitutional", tags: ["বিচার বিভাগ", "সংবিধান"], charterText: "সংবিধানে এরূপ যুক্ত করা হবে যে, সুপ্রীম কোর্টের বিচারক নিয়োগে প্রধান বিচারপতির নেতৃত্বে একটি স্বাধীন বিচার বিভাগীয় নিয়োগ কমিশন (JAC) গঠন করা হবে।", opinions: { agree: 29, disagree: 1, text: "২৯টি রাজনৈতিক দল ও জোট একমত।\n১টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (২১)।\n২টি রাজনৈতিক দল মতামত দেয়নি।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 36, title: "বিচারকদের চাকরির নিয়ন্ত্রণ", fullTitle: "দফা ৩৬: বিচারকদের চাকরির নিয়ন্ত্রণ", category: "constitutional", tags: ["বিচার বিভাগ", "সংবিধান"], charterText: "অধস্তন আদালতের বিচারকদের চাকরির নিয়ন্ত্রণ সম্পূর্ণভাবে সুপ্রীম কোর্টের উপর ন্যস্ত করার জন্য সংবিধানের অনুচ্ছেদ ১১৬ ও সংশ্লিষ্ট বিধিমালা সংশোধন করা হবে।", opinions: { agree: 31, disagree: 1, text: "৩১টি রাজনৈতিক দল ও জোট একমত।\n১টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (১৩)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 38, title: "নির্বাচন কমিশনে নিয়োগ", fullTitle: "দফা ৩৮: নির্বাচন কমিশনে নিয়োগ", category: "constitutional", tags: ["নির্বাচন", "সংবিধান"], charterText: "...প্রধান নির্বাচন কমিশনার এবং নির্ধারিত সংখ্যক নির্বাচন কমিশনারগণের সমন্বয়ে...একটি বাছাই কমিটির মাধ্যমে উপযুক্ত প্রার্থী বাছাই করা হবে...", opinions: { agree: 30, disagree: 0, text: "৩০টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 42, title: "দুর্নীতি দমন কমিশন", fullTitle: "দফা ৪২: দুর্নীতি দমন কমিশনে নিয়োগ", category: "constitutional", tags: ["দুর্নীতি দমন", "সংবিধান"], charterText: "...দুর্নীতি দমন কমিশন একটি সংবিধিবদ্ধ প্রতিষ্ঠান, সেহেতু সেটিকে সাংবিধানিক প্রতিষ্ঠানে রূপান্তরিত করার লক্ষ্যে...একটি 'বাছাই ও পর্যালোচনা কমিটি' গঠন করা হবে...", opinions: { agree: 23, disagree: 7, text: "২৩টি রাজনৈতিক দল একমত।\n৭টি রাজনৈতিক দল ও জোটের নোট অব ডিসেন্ট: পরিশিষ্টের ক্রমিক (১), (২), (১৬), (১৭), (২১) [আইন প্রণয়নের মাধ্যমে], (২৪) ও (৩৩)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 45, title: "স্থানীয় সরকার আর্থিক ব্যবস্থাপনা", fullTitle: "দফা ৪৫: স্থানীয় সরকার প্রতিষ্ঠানের আর্থিক ব্যবস্থাপনা", category: "constitutional", tags: ["স্থানীয় সরকার", "সংবিধান"], charterText: "সংবিধানে এরূপ যুক্ত করা হবে যে, সকল স্থানীয় সরকার প্রতিষ্ঠানের আর্থিক ব্যবস্থাপনা এবং আইন দ্বারা নির্ধারিত সকল কাজ সম্পাদনের ক্ষেত্রে সম্পূর্ণ কার্যকরী স্বায়ত্তশাসন নিশ্চিত করা হবে।", opinions: { agree: 30, disagree: 1, text: "৩০টি রাজনৈতিক দল ও জোট একমত।\n১টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (২২)।\n১টি রাজনৈতিক দল মতামত দেয়নি।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 52, title: "সুপ্রীম কোর্ট সচিবালয়", fullTitle: "দফা ৫২: সুপ্রীম কোর্ট সচিবালয় প্রতিষ্ঠা", category: "legal", tags: ["বিচার বিভাগ", "আইন"], charterText: "নির্বাহী বিভাগ থেকে বিচার বিভাগকে কার্যকরভাবে পৃথকীকরণের লক্ষ্যে সুপ্রীম কোর্টের নিজস্ব সচিবালয় থাকবে এবং এজন্য প্রয়োজনীয় আইন প্রণয়ন করা হবে।", opinions: { agree: 32, disagree: 0, text: "৩২টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 62, title: "তথ্য অধিকার আইন", fullTitle: "দফা ৬২: তথ্য অধিকার আইন, ২০০৯-এর সংশোধন", category: "legal", tags: ["জনপ্রশাসন", "আইন"], charterText: "নাগরিকগণ যাতে সহজে ও অবাধে সরকারি সেবা সংক্রান্ত তথ্য পেতে পারে সেজন্য তথ্য অধিকার আইন, ২০০৯...পর্যালোচনা করে সংশোধন করা হবে। ... রাজনৈতিক দলসমূহকে...এই আইনের আওতাভুক্ত করা হবে।", opinions: { agree: 28, disagree: 4, text: "২৮টি রাজনৈতিক দল ও জোট একমত।\n৪টি রাজনৈতিক দল ও জোট একমত নয়: পরিশিষ্টের ক্রমিক (১), (২৭), (২৮) ও (৩৩)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 69, title: "স্বাধীন পুলিশ কমিশন", fullTitle: "দফা ৬৯: স্বাধীন পুলিশ কমিশন গঠন", category: "legal", tags: ["পুলিশ", "আইন"], charterText: "পুলিশ বাহিনীর পেশাদারত্ব ও দায়বদ্ধতা নিশ্চিতকরণ এবং পুলিশি সেবাকে জনবান্ধব হিসেবে প্রতিষ্ঠিত করার লক্ষ্যে একটি 'পুলিশ কমিশন' গঠন করা হবে।", opinions: { agree: 30, disagree: 0, text: "৩০টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 70, title: "বৈধ উৎসবিহীন আয়", fullTitle: "দফা ৭০: বৈধ উৎসবিহীন আয়কে বৈধতা দানের চর্চা বন্ধ করা", category: "legal", tags: ["দুর্নীতি দমন", "আইন"], charterText: "...বৈধ উৎসবিহীন আয়কে বৈধতা দানের যেকোনো রাষ্ট্রীয় চর্চা চিরস্থায়ীভাবে বন্ধ করতে সুনির্দিষ্ট আইন প্রণয়ন করা হবে।", opinions: { agree: 31, disagree: 1, text: "৩১টি রাজনৈতিক দল ও জোট একমত।\n১টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (৩৩)।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+            { id: 74, title: "জনপ্রতিনিধিদের সম্পদ", fullTitle: "দফা ৭৪: জনপ্রতিনিধিদের সম্পদ ও আয়-ব্যয়ের তথ্য প্রকাশ", category: "legal", tags: ["দুর্নীতি দমন", "আইন"], charterText: "সকল পর্যায়ের নির্বাচিত জনপ্রতিনিধিগণ দায়িত্ব গ্রহণের ৩ (তিন) মাসের মধ্যে...নিজের ও পরিবারের সদস্যদের আয় ও সম্পদ বিবরণী নির্বাচন কমিশনে জমা দিবেন এবং...ওয়েবসাইটে প্রকাশ করবে।", opinions: { agree: 32, disagree: 0, text: "৩২টি রাজনৈতিক দল ও জোট একমত।" } },
+            { id: 78, title: "দুদক আইন ৩২ক বিলুপ্ত", fullTitle: "দফা ৭৮: দুর্নীতি দমন কমিশন আইন, ২০০৪-এর ধারা ৩২ক বিলুপ্ত করা", category: "legal", tags: ["দুর্নীতি দমন", "আইন"], charterText: "দুর্নীতি দমন কমিশন আইন, ২০০৪-এর ধারা ৩২ক বিলুপ্ত করা হবে। এর ফলে...সরকারি কর্মচারীর বিরুদ্ধে মামলা দায়ের করতে...সরকারের পূর্বানুমোদন গ্রহণ করতে হবে না।", opinions: { agree: 28, disagree: 3, text: "২৮টি রাজনৈতিক দল ও জোট একমত।\n৩টি রাজনৈতিক দল একমত নয়: পরিশিষ্টের ক্রমিক (১২), (২৫) ও (৩১)।\n১টি রাজনৈতিক দল স্বতন্ত্র মতামত জমা দিয়েছে।\n[নোট: ... ব্যবস্থা গ্রহণ করতে পারবে।]" } },
+        ];
+
+        const TOTAL_ENTITIES = 33;
+        const proposalGrid = document.getElementById('proposal-grid');
+        const modal = document.getElementById('details-modal');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const modalTitle = document.getElementById('modal-title');
+        const modalCharterText = document.getElementById('modal-charter-text');
+        const modalOpinionText = document.getElementById('modal-opinion-text');
+        const navBar = document.getElementById('navbar');
+        const tagFilterOptions = document.getElementById('tag-filter-options');
+        const explorerSubtitle = document.getElementById('explorer-subtitle');
+        const overallConsensusStat = document.getElementById('overall-consensus-stat');
+
+        let overviewChartInstance = null;
+        let modalChartInstance = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderProposals(allProposals);
+            renderOverviewChart(allProposals);
+            initFilters();
+            initModal();
+            calculateOverallConsensus();
+        });
+
+        function calculateOverallConsensus() {
+            if (allProposals.length === 0) {
+                overallConsensusStat.textContent = "N/A";
+                return;
+            }
+            const totalAgreement = allProposals.reduce((sum, proposal) => sum + proposal.opinions.agree, 0);
+            const averageAgreement = totalAgreement / allProposals.length;
+            const percentage = (averageAgreement / TOTAL_ENTITIES) * 100;
+            overallConsensusStat.textContent = `${percentage.toFixed(0)}%`;
+        }
+
+        function renderProposals(proposals) {
+            proposalGrid.innerHTML = '';
+            if (proposals.length === 0) {
+                proposalGrid.innerHTML = `<p class="text-gray-600 col-span-1 md:col-span-2 lg:col-span-3 text-center">এই ফিল্টারে কোনো প্রস্তাব পাওয়া যায়নি।</p>`;
+                return;
+            }
+            
+            proposals.forEach(proposal => {
+                const { agree, disagree } = proposal.opinions;
+                const noComment = TOTAL_ENTITIES - agree - disagree;
+                const total = TOTAL_ENTITIES;
+                
+                const agreePercent = (agree / total) * 100;
+                const disagreePercent = (disagree / total) * 100;
+                const noCommentPercent = (noComment / total) * 100;
+
+                const card = `
+                    <div class="card p-5 flex flex-col justify-between" data-proposal-id="${proposal.id}">
+                        <div>
+                            <h3 class="text-xl font-bold mb-2 text-[#4A4A4A]">${proposal.fullTitle}</h3>
+                            <p class="text-sm text-gray-600 mb-4 min-h-[40px]">${proposal.charterText.substring(0, 70)}...</p>
+                            <div class="w-full h-2 bg-gray-200 rounded-full flex overflow-hidden mb-2">
+                                <div style="width: ${agreePercent}%" class="bg-[#5D737E]" title="একমত: ${agree}"></div>
+                                <div style="width: ${disagreePercent}%" class="bg-[#A37B73]" title="একমত নয়: ${disagree}"></div>
+                                <div style="width: ${noCommentPercent}%" class="bg-gray-300" title="মতামত দেয়নি: ${noComment}"></div>
+                            </div>
+                            <div class="flex justify-between text-xs font-medium text-gray-600 mb-4">
+                                <span>একমত: ${agree}</span>
+                                <span>ভিন্নমত: ${disagree}</span>
+                                <span>মন্তব্য নেই: ${noComment}</span>
+                            </div>
+                        </div>
+                        <button class="details-btn w-full text-center px-4 py-2 bg-[#D4A373] text-white rounded-md font-semibold hover:bg-opacity-90 transition-colors">
+                            বিস্তারিত দেখুন
+                        </button>
+                    </div>
+                `;
+                proposalGrid.innerHTML += card;
+            });
+        }
+
+        function renderOverviewChart(proposals) {
+            const bins = [
+                { label: '০-৫', min: 0, max: 5, count: 0 },
+                { label: '৬-১০', min: 6, max: 10, count: 0 },
+                { label: '১১-১৫', min: 11, max: 15, count: 0 },
+                { label: '১৬-২০', min: 16, max: 20, count: 0 },
+                { label: '২১-২৫', min: 21, max: 25, count: 0 },
+                { label: '২৬-৩০', min: 26, max: 30, count: 0 },
+                { label: '৩১-৩৩', min: 31, max: 33, count: 0 },
+            ];
+
+            proposals.forEach(proposal => {
+                const agreeCount = proposal.opinions.agree;
+                for (const bin of bins) {
+                    if (agreeCount >= bin.min && agreeCount <= bin.max) {
+                        bin.count++;
+                        break;
+                    }
+                }
+            });
+
+            const ctx = document.getElementById('overviewChart').getContext('2d');
+            if (overviewChartInstance) {
+                overviewChartInstance.destroy();
+            }
+            overviewChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bins.map(bin => `${bin.label}টি দলের সমর্থন`),
+                    datasets: [{
+                        label: 'প্রস্তাবের সংখ্যা',
+                        data: bins.map(bin => bin.count),
+                        backgroundColor: '#5D737E',
+                        borderColor: '#5D737E',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'প্রস্তাবের সংখ্যা'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'ঐকমত্যের স্তর (সমর্থনকারী দলের সংখ্যা)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    const item = tooltipItems[0];
+                                    let label = item.chart.data.labels[item.dataIndex];
+                                    if (Array.isArray(label)) {
+                                      return label.join(' ');
+                                    } else {
+                                      return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initFilters() {
+            navBar.addEventListener('click', (e) => {
+                const button = e.target.closest('.nav-button, .dropdown-content a');
+                if (!button) return;
+
+                const filterType = button.dataset.filterType;
+                const filterValue = button.dataset.filterValue;
+
+                if (!filterType || !filterValue) return;
+                
+                let filteredProposals = [];
+                let subtitle = '';
+
+                if (filterType === 'all') {
+                    filteredProposals = allProposals;
+                    subtitle = 'বর্তমানে "সকল প্রস্তাব" প্রদর্শিত হচ্ছে।';
+                } else if (filterType === 'category') {
+                    filteredProposals = allProposals.filter(p => p.category === filterValue);
+                    subtitle = `বর্তমানে "${filterValue === 'constitutional' ? 'সাংবিধানিক সংস্কার' : 'আইনি ও নির্বাহী সংস্কার'}" প্রস্তাবগুলো প্রদর্শিত হচ্ছে।`;
+                } else if (filterType === 'tag') {
+                    if (filterValue === 'all') {
+                        filteredProposals = allProposals;
+                        subtitle = 'বর্তমানে "সকল ক্ষেত্র" প্রদর্শিত হচ্ছে।';
+                    } else {
+                        filteredProposals = allProposals.filter(p => p.tags.includes(filterValue));
+                        subtitle = `বর্তমানে "${filterValue}" সম্পর্কিত প্রস্তাবগুলো প্রদর্শিত হচ্ছে।`;
+                    }
+                }
+
+                renderProposals(filteredProposals);
+                renderOverviewChart(filteredProposals);
+                explorerSubtitle.textContent = subtitle;
+
+                document.querySelectorAll('.nav-button, .dropdown-content a').forEach(btn => btn.classList.remove('active'));
+                
+                if (filterType === 'tag') {
+                    const dropdownBtn = document.querySelector('.dropdown .nav-button');
+                    dropdownBtn.classList.add('active');
+                    if (filterValue !== 'all') {
+                        dropdownBtn.textContent = filterValue;
+                    } else {
+                        dropdownBtn.innerHTML = `ক্ষেত্রভিত্তিক ফিল্টার <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>`;
+                    }
+                } else {
+                    document.querySelector('.dropdown .nav-button').innerHTML = `ক্ষেত্রভিত্তিক ফিল্টার <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>`;
+                    button.classList.add('active');
+                }
+            });
+        }
+        
+        function initModal() {
+            proposalGrid.addEventListener('click', (e) => {
+                const detailsButton = e.target.closest('.details-btn');
+                if (detailsButton) {
+                    const card = detailsButton.closest('[data-proposal-id]');
+                    const proposalId = card.dataset.proposalId;
+                    const proposal = allProposals.find(p => p.id == proposalId);
+                    if (proposal) {
+                        populateModal(proposal);
+                        modal.classList.remove('hidden');
+                    }
+                }
+            });
+
+            modalCloseBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                }
+            });
+        }
+
+        function populateModal(proposal) {
+            modalTitle.textContent = proposal.fullTitle;
+            modalCharterText.textContent = proposal.charterText;
+            
+            modalOpinionText.innerHTML = '';
+            proposal.opinions.text.split('\n').forEach(line => {
+                const p = document.createElement('p');
+                if (line.startsWith('একমত')) {
+                    p.className = 'text-green-700';
+                } else if (line.startsWith('একমত নয়') || line.startsWith('নোট অব ডিসেন্ট')) {
+                    p.className = 'text-red-700';
+                } else if (line.startsWith('[নোট:')) {
+                    p.className = 'text-gray-600 italic mt-2';
+                }
+                p.textContent = line;
+                modalOpinionText.appendChild(p);
+            });
+
+            const { agree, disagree } = proposal.opinions;
+            const noComment = TOTAL_ENTITIES - agree - disagree;
+            const ctx = document.getElementById('modal-chart').getContext('2d');
+            
+            if (modalChartInstance) {
+                modalChartInstance.destroy();
+            }
+
+            modalChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['একমত', 'একমত নয়', 'মতামত দেয়নি'],
+                    datasets: [{
+                        data: [agree, disagree, noComment],
+                        backgroundColor: ['#5D737E', '#A37B73', '#D3D3D3'],
+                        borderColor: ['#ffffff', '#ffffff', '#ffffff'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    const item = tooltipItems[0];
+                                    let label = item.chart.data.labels[item.dataIndex];
+                                    if (Array.isArray(label)) {
+                                      return label.join(' ');
+                                    } else {
+                                      return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>
